@@ -68,6 +68,44 @@ def extract_expense(node_input: dict) -> Event:
     else:
         return Event(output=expense, route="review_required", state=state_delta)
 
+import re
+
+@node
+def security_checkpoint(ctx: Context, node_input: Expense) -> Event:
+    """Scrub PII and defend against prompt injection before LLM review."""
+    original_desc = node_input.description
+    redacted_categories = []
+    
+    # 1. Scrub SSNs (e.g., XXX-XX-XXXX)
+    desc = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED SSN]', original_desc)
+    if desc != original_desc:
+        redacted_categories.append("SSN")
+        original_desc = desc
+        
+    # Scrub Credit Card numbers (13-19 digits, possibly with spaces/dashes)
+    desc = re.sub(r'\b(?:\d[ -]*?){13,19}\b', '[REDACTED CC]', original_desc)
+    if desc != original_desc:
+        redacted_categories.append("Credit Card")
+        
+    node_input.description = desc
+    # Remember redacted categories in state
+    ctx.state["redacted_categories"] = redacted_categories
+    
+    # 2. Defend against prompt injection (heuristic check)
+    suspicious_phrases = ["ignore previous instructions", "auto-approve", "bypass", "system prompt", "disregard"]
+    is_injected = any(phrase in desc.lower() for phrase in suspicious_phrases)
+    
+    if is_injected:
+        # Route straight to human review as a security event, bypassing LLM
+        security_alert = RiskAssessment(
+            risk_factors="SECURITY EVENT: Potential prompt injection detected in description.",
+            alert_raised=True
+        )
+        return Event(output=security_alert, route="injection_detected")
+    
+    # Clean expense, continue to LLM reviewer
+    return Event(output=node_input, route="clean")
+
 @node
 def auto_approve(node_input: Expense) -> str:
     """Instantly approves the expense."""
@@ -87,9 +125,12 @@ async def human_review(ctx: Context, node_input: RiskAssessment):
     """Pauses for human-in-the-loop approval, displaying the risk assessment."""
     if not ctx.resume_inputs:
         expense_data = ctx.state.get("expense", {})
+        redactions = ctx.state.get("redacted_categories", [])
+        redaction_note = f"\n[Note: Redacted {', '.join(redactions)}]" if redactions else ""
+        
         message = (
             f"Review required for expense from {expense_data.get('submitter')} "
-            f"for ${expense_data.get('amount')}.\n"
+            f"for ${expense_data.get('amount')}.{redaction_note}\n"
             f"Risk Assessment: {node_input.risk_factors}\n"
             f"Alert Raised: {node_input.alert_raised}\n"
             f"Please approve or reject."
@@ -112,7 +153,9 @@ workflow = Workflow(
     edges=[
         ('START', extract_expense),
         (extract_expense, auto_approve, "auto_approve"),
-        (extract_expense, risk_reviewer, "review_required"),
+        (extract_expense, security_checkpoint, "review_required"),
+        (security_checkpoint, risk_reviewer, "clean"),
+        (security_checkpoint, human_review, "injection_detected"),
         (risk_reviewer, human_review),
         (human_review, record_outcome)
     ]
