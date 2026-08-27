@@ -3,9 +3,8 @@
 Simple ReAct agent
 Agent generated with `agents-cli` version `0.6.1`
 
-## Project Structure
+ Project Structure
 
-```
 ambient-expense-agent/
 ├── app/         # Core agent code
 │   ├── agent.py               # Main agent logic
@@ -14,17 +13,6 @@ ambient-expense-agent/
 ├── tests/                     # Unit, integration, and load tests
 ├── GEMINI.md                  # AI-assisted development guide
 └── pyproject.toml             # Project dependencies
-```
-
-> 💡 **Tip:** Use [Antigravity CLI](https://antigravity.google/) for AI-assisted development - project context is pre-configured in `GEMINI.md`.
-
-## Requirements
-
-Before you begin, ensure you have:
-- **uv**: Python package manager (used for all dependency management in this project) - [Install](https://docs.astral.sh/uv/getting-started/installation/) ([add packages](https://docs.astral.sh/uv/concepts/dependencies/) with `uv add <package>`)
-- **agents-cli**: Agents CLI - Install with `uv tool install google-agents-cli`
-- **Google Cloud SDK**: For GCP services - [Install](https://cloud.google.com/sdk/docs/install)
-
 
 ## Quick Start
 
@@ -84,11 +72,6 @@ agents-cli deploy
 To add CI/CD and Terraform, run `agents-cli scaffold enhance`.
 To set up your production infrastructure, run `agents-cli infra cicd`.
 
-## Observability
 
-Built-in telemetry exports to Cloud Trace, BigQuery, and Cloud Logging.
 
-## A2A Inspector
 
-This agent supports the [A2A Protocol](https://a2a-protocol.org/). Use the [A2A Inspector](https://github.com/a2aproject/a2a-inspector) to test interoperability.
-See the [A2A Inspector docs](https://github.com/a2aproject/a2a-inspector) for details.
