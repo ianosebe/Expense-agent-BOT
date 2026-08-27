@@ -3,7 +3,7 @@
 Simple ReAct agent
 Agent generated with `agents-cli` version `0.6.1`
 
- Project Structure
+ ## Project Structure
 
 ambient-expense-agent/
 ├── app/         # Core agent code
