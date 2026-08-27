@@ -11,14 +11,16 @@ from google.adk.models import Gemini
 import os
 import google.auth
 
+# Only use Vertex AI if the user has explicitly set up GCP credentials
 try:
     _, project_id = google.auth.default()
     if project_id:
         os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+        os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
 except Exception:
-    pass
-os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
-os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+    # Fallback to AI Studio API Key
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 # Configuration
 class Config:
@@ -37,13 +39,23 @@ class RiskAssessment(BaseModel):
     risk_factors: str
     alert_raised: bool
 
+from typing import Any
+from google.genai import types
+
 @node
-def extract_expense(node_input: dict) -> Event:
+def extract_expense(node_input: Any) -> Event:
     """Extracts expense details from the JSON event and routes based on amount."""
-    data = node_input.get("data")
-    if not data:
-        # Fallback if just passed directly
+    data = None
+    if isinstance(node_input, types.Content):
+        if node_input.parts:
+            data = node_input.parts[0].text
+    elif isinstance(node_input, dict):
+        data = node_input.get("data", node_input)
+    else:
         data = node_input
+        
+    if not data:
+        raise ValueError("Missing data in input")
 
     if isinstance(data, str):
         try:
@@ -152,10 +164,14 @@ workflow = Workflow(
     name="ambient_expense_agent",
     edges=[
         ('START', extract_expense),
-        (extract_expense, auto_approve, "auto_approve"),
-        (extract_expense, security_checkpoint, "review_required"),
-        (security_checkpoint, risk_reviewer, "clean"),
-        (security_checkpoint, human_review, "injection_detected"),
+        (extract_expense, {
+            "auto_approve": auto_approve,
+            "review_required": security_checkpoint
+        }),
+        (security_checkpoint, {
+            "clean": risk_reviewer,
+            "injection_detected": human_review
+        }),
         (risk_reviewer, human_review),
         (human_review, record_outcome)
     ]
